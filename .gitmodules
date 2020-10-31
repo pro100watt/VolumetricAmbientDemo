@@ -1,0 +1,3 @@
+[submodule "FMODPlugin"]
+	path = Plugins/FMODPlugin
+	url = https://github.com/pro100watt/fmod-ue4-plugin
