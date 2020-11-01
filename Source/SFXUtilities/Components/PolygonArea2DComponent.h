@@ -25,11 +25,18 @@ public:
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	/** Returns true if the Location is within Radius from the MaxBox bounding box in 2D */
 	bool IsWithinRadius(const FVector& Location, float Radius);
-	FVector GetClosestPoint(const FVector &Location);
+
+	/** Returns the closest to the Location point inside the polygon in 2D (Z is copied from the Location) */
+	FVector FindClosestPoint(const FVector &Location);
 
 private:
-	int32 FindContainingSector(const FVector2D& Point);
+	/**
+	 * Finds two adjacent points, which form a sector from the origin, which contains the Location
+	 * Returns the index of the first point
+	 */
+	int32 FindContainingSector(const FVector2D& Location);
 
 	UPROPERTY()
 	TArray<FVector2D> Points;
@@ -40,6 +47,9 @@ private:
 
 
 #if WITH_EDITOR
+	void DrawDebugSegment(const FVector2D& A, const FVector2D& B);
+	void DrawDebugSide(const FVector2D& A, const FVector2D& B);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Editor, meta = (AllowPrivateAccess = "true"))
 	FLinearColor EditorSelectedColor;
 
@@ -52,13 +62,13 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Editor, meta = (AllowPrivateAccess = "true", ClampMin = "10.0"))
 	float MinRadius;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Editor,Debug", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Editor|Debug", meta = (AllowPrivateAccess = "true"))
 	bool bDrawArea;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Editor,Debug", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Editor|Debug", meta = (AllowPrivateAccess = "true"))
 	bool bDrawBoxes;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Editor,Debug", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Editor|Debug", meta = (AllowPrivateAccess = "true"))
 	bool bDrawTestedSegments;
 
 	friend class FPolygonArea2DComponentVisualiser;

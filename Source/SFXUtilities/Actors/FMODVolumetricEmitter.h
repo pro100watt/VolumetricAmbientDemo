@@ -22,16 +22,25 @@ public:
 	void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintCallable)
-	void SetListener(const USceneComponent *Other) { Listener = Other; }
-
-	void SetListenerPosition(const FVector& Pos);
+	void SetListener(const APlayerController* NewListener) { Listener = NewListener; }
 
 protected:
-	float GetAttenuationRadius() const;
+	void BeginPlay() override;
 
 private:
+	void UpdateEmitterPosition();
+
+	/** Returns false if failed to update max radius */
+	bool UpdateMaxRadius();
+
+	/** Returns false if listener location has not changed */
+	bool UpdateListenerLocation();
+
 	UPROPERTY(VisibleAnywhere)
 	UPolygonArea2DComponent* Area;
 
-	const USceneComponent *Listener;
+	const APlayerController* Listener;
+
+	FVector ListenerLocation;
+	float MaxRadius;
 };

@@ -6,12 +6,15 @@
 #include "SFXUtilities/Components/PolygonArea2DComponent.h"
 
 #include "FMODEvent.h"
+#include "FMODAudioComponent.h"
 
 #if WITH_EDITOR
 #include "DrawDebugHelpers.h"
 #endif
 
 AFMODVolumetricEmitter::AFMODVolumetricEmitter()
+	: Listener(nullptr)
+	, MaxRadius(0.f)
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
@@ -22,58 +25,94 @@ AFMODVolumetricEmitter::AFMODVolumetricEmitter()
 	Area = CreateDefaultSubobject<UPolygonArea2DComponent>(TEXT("Area"));
 }
 
+void AFMODVolumetricEmitter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	verifyf(UpdateMaxRadius(), TEXT("Failed to set MaxRadius in AFMODVolumetricEmitter::BeginPlay"));
+}
+
 void AFMODVolumetricEmitter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (Listener != nullptr)
-	{
-		SetListenerPosition(Listener->GetComponentLocation());
+	UpdateEmitterPosition();
+
 #if WITH_EDITOR
-		{
-			DrawDebugSphere(GetWorld(), AudioComponent->GetComponentLocation(), GetAttenuationRadius(), 20, FColor::Orange);
-		}
+	DrawDebugSphere(GetWorld(), AudioComponent->GetComponentLocation(), MaxRadius, 20, FColor::Orange);
 #endif
+
+#if DO_CHECK
+	// Check if MaxRadius has changed at runtime
+	{
+		float OldMaxRadius = MaxRadius;
+		if (UpdateMaxRadius())
+		{
+			checkf(OldMaxRadius == MaxRadius, TEXT("AFMODVolumetricEmitter does not support changing AttenuationRadius at runtime."));
+		}
 	}
+#endif
 }
 
-void AFMODVolumetricEmitter::SetListenerPosition(const FVector& Pos)
+void AFMODVolumetricEmitter::UpdateEmitterPosition()
 {
-	FVector LocalPos = Pos - GetActorLocation();
-	if (!Area->IsWithinRadius(LocalPos, GetAttenuationRadius())) return;
+	if (!UpdateListenerLocation())
+	{
+		// Listener location did not check
+		return;
+	}
 
-	FVector ClosestPoint = Area->GetClosestPoint(LocalPos);
+	FVector LocalListenerPosition = ListenerLocation - GetActorLocation();
+	if (!Area->IsWithinRadius(LocalListenerPosition, MaxRadius))
+	{
+		// Listener is outside sound attenuation radius
+		return;
+	}
+
+	FVector ClosestPoint = Area->FindClosestPoint(LocalListenerPosition);
 
 	AudioComponent->SetRelativeLocation(ClosestPoint);
 }
 
-// Would be much better if cached,
-// but FMODComponent API does not have callbacks on event or attenuation radius change
-float AFMODVolumetricEmitter::GetAttenuationRadius() const
+bool AFMODVolumetricEmitter::UpdateListenerLocation()
 {
-	float Radius = 0.f;
+	if (Listener == nullptr) return false;
 
-	if (!IsValid(AudioComponent) || !AudioComponent->Event.IsValid()) return Radius;
+	FVector CurrentLocation;
+	FVector ListenerFrontDir, ListenerRightDir;
+	Listener->GetAudioListenerPosition(CurrentLocation, ListenerFrontDir, ListenerRightDir);
+
+	if (CurrentLocation.Equals(ListenerLocation)) return false;
+
+	ListenerLocation = CurrentLocation;
+
+	return true;
+}
+
+// Would be much better if cached, but UFMODAudioComponent does not have attenuation radius OnChanged callbacks
+bool AFMODVolumetricEmitter::UpdateMaxRadius()
+{
+	if (!IsValid(AudioComponent) || !AudioComponent->Event.IsValid()) return false;
 
 	FMOD::Studio::EventDescription* EventDesc =
 		IFMODStudioModule::Get().GetEventDescription(AudioComponent->Event.Get(), EFMODSystemContext::Auditioning);
-	if (EventDesc == nullptr) return Radius;
+
+	if (EventDesc == nullptr) return false;
 	
-	{
-		bool bIs3D = false;
-		EventDesc->is3D(&bIs3D);
-		if (!bIs3D) return Radius;
-	}
+	bool bIs3D = false;
+	EventDesc->is3D(&bIs3D);
+
+	if (!bIs3D) return false;
 
 	if (AudioComponent->AttenuationDetails.bOverrideAttenuation)
 	{
-		Radius = AudioComponent->AttenuationDetails.MaximumDistance;
+		MaxRadius = AudioComponent->AttenuationDetails.MaximumDistance;
 	}
 	else
 	{
-		EventDesc->getMaximumDistance(&Radius);
+		EventDesc->getMaximumDistance(&MaxRadius);
 	}
-	Radius = FMODUtils::DistanceToUEScale(Radius);
+	MaxRadius = FMODUtils::DistanceToUEScale(MaxRadius);
 
-	return Radius;
+	return true;
 }
